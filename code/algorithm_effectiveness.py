@@ -37,10 +37,7 @@ for line in lines:
     originEntropy.append(float(line.split()[2]))
     newK.append(float(line.split()[3]))
     newEntropy.append(float(line.split()[4]))
-# print(originK)
-# print(originEntropy)
-# print(newK)
-# print(newEntropy)
+
 with open(resultPath +'stats.txt', 'a') as f:
     f.write(f'current repo: {repo}\n')
     f.write(str(statistics.mean(originK))+ ' '+str(statistics.mean(newK)) + '\n')
