@@ -2,7 +2,7 @@ library("car")
 library("lme4")
 library("performance")
 library("emmeans")
-library("data.table")  # 用于数据表操作
+library("data.table") 
 library("dplyr")
 library("tidyverse")    # needed for data manipulation
 library("knitr")
@@ -50,18 +50,17 @@ data$before_average_time <- scale(data$before_average_time)
 data$before_trans_time <- scale(data$before_trans_time)
 
 get_points <- function(x, n = 3) {
-  x_mean <- mean(x)  # 计算 x 的均值
-  x_sd   <- sd(x) # 计算 x 的标准差
+  x_mean <- mean(x)  
+  x_sd   <- sd(x) 
   
-  x_bt   <- min(x)   # 计算 x 的最小值
-  x_m2   <- x_mean - 2 * x_sd  # 计算 x 的均值减去两倍标准差的值
-  x_m1   <- x_mean - x_sd # 计算 x 的均值减去标准差的值
-  x_ct   <- x_mean # 获取 x 的均值
-  x_p1   <- x_mean + x_sd # 计算 x 的均值加上标准差的值
-  x_p2   <- x_mean + 2 * x_sd # 计算 x 的均值加上两倍标准差的值
-  x_up   <- max(x) # 计算 x 的最大值
+  x_bt   <- min(x)  
+  x_m2   <- x_mean - 2 * x_sd 
+  x_m1   <- x_mean - x_sd 
+  x_ct   <- x_mean
+  x_p1   <- x_mean + x_sd 
+  x_p2   <- x_mean + 2 * x_sd
+  x_up   <- max(x) 
   
-  # 将上面计算出的各个值保留一位小数
   x_bt_r <- round(x_bt, digits = 1)
   x_m2_r <- round(x_m2, digits = 1)
   x_m1_r <- round(x_m1, digits = 1)
@@ -69,13 +68,6 @@ get_points <- function(x, n = 3) {
   x_p1_r <- round(x_p1, digits = 1)
   x_p2_r <- round(x_p2, digits = 1)
   x_up_r <- round(x_up, digits = 1)
-  
-  # 根据 n 的取值，返回不同数量的点
-  # 这是原来的做法，返回最值和均值
-  # if (n == 3) {
-  #  points <- c(x_bt_r, x_ct_r, x_up_r)
-  # }
-  # 现在改成返回均值 和 加、减一个标准差
   
   if (n == 3) {
     points <- c(x_m1_r, x_ct_r, x_p1_r)
@@ -89,12 +81,8 @@ get_points <- function(x, n = 3) {
 
 generate_and_save_emmip <- function(rq_model,formula, file,vary_project_age_fix_fork_entropy) {
   # formula: fork_entropy_scale ~ project_age_scale
-  # file: 输出的 CSV 文件名
-  
-  # 生成 emmip 数据
+
   emmip_data <- emmip(rq_model, formula, at = vary_project_age_fix_fork_entropy, plotit = FALSE)
-  # file <- paste("./", file, sep = "/")
-  # 将数据保存为 CSV 文件
   write.csv(as.data.table(emmip_data),
             file <- file,
             row.names = FALSE,
