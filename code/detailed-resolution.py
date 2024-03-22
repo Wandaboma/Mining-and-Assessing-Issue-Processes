@@ -12,29 +12,23 @@ import scipy.stats as stats
 import csv
 import pandas as pd
 
+# 2024-02-27T22:40Z
 def analysis(data, alphabet):
-    # alphabet = {}
-    # i = 0
-    # for issue in data:
-    #     for event in issue:
-    #         if event['role'] + event['event'] not in alphabet:
-    #             alphabet[event['role'] + event['event']] = i
-    #             i += 1
-
     L = len(alphabet)
     countMatrix = np.zeros((L, L))
     transTimeMatrix = np.zeros((L, L))
     for issue in data:
         for i in range(0, len(issue) - 1):
-            last = issue[i]['role'] + issue[i]['event']
-            present = issue[i + 1]['role'] + issue[i + 1]['event']
-            countMatrix[alphabet[last]][alphabet[present]] += 1
-            time = datetime.strptime(issue[i + 1]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z') - datetime.strptime(issue[i]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
-            transTimeMatrix[alphabet[last]][alphabet[present]] += time.days
+            for eventLast in issue[i]:
+                for eventNext in issue[i + 1]:
+                    last = eventLast['role'] + eventLast['event']
+                    present = eventNext['role'] + eventNext['event']
+                    countMatrix[alphabet[last]][alphabet[present]] += 1
+                    time = datetime.strptime(eventNext['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z') - datetime.strptime(eventLast['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
+                    transTimeMatrix[alphabet[last]][alphabet[present]] += time.days
     
     probMatrix = np.zeros((L, L))
     total = 0
-    entropy = 0
     sumList = []
     timeList = []
     for i in range(L):
@@ -60,34 +54,37 @@ def analysis(data, alphabet):
             if probMatrix[i][j] != 0:
                 e -= probMatrix[i][j] * math.log(probMatrix[i][j])
         entropyList.append(e)
-        entropy += sumList[i] / total * e
     # return entropy
     return entropyList, timeList
 
-# def efficiency(data):
-#     resolutionTimeList = []
-#     eventNumberList = []
-#     issueLengthList = []
-#     participantNumList = []
+def issueTimeCount(issue):
+    time = datetime.strptime(issue[-1][0]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z') - datetime.strptime(issue[0][0]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
+    day = time.days
+    for i in range(len(issue) - 1):
+        flagA = False
+        flagB = False
+        for event in issue[i]:
+            if 'Close' in event['event']:
+                flagA = True
+        for event in issue[i + 1]:
+            if 'Reopen' in event['event']:
+                flagB = True
+        if flagA and flagB:
+            time = datetime.strptime(issue[i + 1][0]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z') - datetime.strptime(issue[i][0]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
+            day -= time.days
+    return day
 
-#     for issue in data:
-#         time = datetime.strptime(issue[-1]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z') - datetime.strptime(issue[0]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
-#         resolutionTimeList.append(time.days)
-#         eventDict = {}
-#         participantDict = {}
-#         for event in issue:
-#             if event['role'] + event['event'] not in eventDict:
-#                 eventDict[event['role'] + event['event']] = 1
-#             if event['actor'] not in participantDict:
-#                 participantDict[event['actor']] = 1
-#         eventNumberList.append(len(eventDict))
-#         issueLengthList.append(len(issue))
-#         participantNumList.append(len(participantDict))
-
-#     return statistics.mean(resolutionTimeList), statistics.mean(eventNumberList), statistics.mean(issueLengthList), statistics.mean(participantNumList)
+def averageTotalTime(data):
+    totalTime = 0
+    sum = 0
+    for issue in data:
+        time = issueTimeCount(issue)
+        sum += 1
+        totalTime += time
+    if sum == 0: return 0
+    else: return totalTime / sum
 
 def efficiency(data):
-    resolutionTimeList = []
     eventNumberList = []
     issueLengthList = []
     participantNumList = []
@@ -101,8 +98,6 @@ def efficiency(data):
     normalSubscribeList = []
 
     for issue in data:
-        time = datetime.strptime(issue[-1]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z') - datetime.strptime(issue[0]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
-        resolutionTimeList.append(time.days)
         eventDict = {}
         participantDict = {}
         coreIssue = 0
@@ -113,31 +108,32 @@ def efficiency(data):
         normalLabel  = 0
         coreSubscribe = 0
         normalSubscribe = 0
-        for event in issue:
-            if event['role'] + event['event'] not in eventDict:
-                eventDict[event['role'] + event['event']] = 1
-            if event['actor'] not in participantDict:
-                participantDict[event['actor']] = 1
-            if event['event'] == 'IssueComment':
-                if event['role'] == 'Core':
-                    coreIssue += 1
-                if event['role'] == 'Normal':
-                    normalIssue += 1
-            if event['event'] == 'AssignedEvent':
-                if event['role'] == 'Core':
-                    coreAssign += 1
-                if event['role'] == 'Normal':
-                    normalAssign += 1
-            if event['event'] == 'LabeledEvent':
-                if event['role'] == 'Core':
-                    coreLabel += 1
-                if event['role'] == 'Normal':
-                    normalLabel += 1
-            if event['event'] == 'SubscribedEvent':
-                if event['role'] == 'Core':
-                    coreSubscribe += 1
-                if event['role'] == 'Normal':
-                    normalSubscribe += 1
+        for group in issue:
+            for event in group:
+                if event['role'] + event['event'] not in eventDict:
+                    eventDict[event['role'] + event['event']] = 1
+                if event['actor'] not in participantDict:
+                    participantDict[event['actor']] = 1
+                if event['event'] == 'IssueComment':
+                    if event['role'] == 'Core':
+                        coreIssue += 1
+                    if event['role'] == 'Normal':
+                        normalIssue += 1
+                if event['event'] == 'AssignedEvent':
+                    if event['role'] == 'Core':
+                        coreAssign += 1
+                    if event['role'] == 'Normal':
+                        normalAssign += 1
+                if event['event'] == 'LabeledEvent':
+                    if event['role'] == 'Core':
+                        coreLabel += 1
+                    if event['role'] == 'Normal':
+                        normalLabel += 1
+                if event['event'] == 'SubscribedEvent':
+                    if event['role'] == 'Core':
+                        coreSubscribe += 1
+                    if event['role'] == 'Normal':
+                        normalSubscribe += 1
         eventNumberList.append(len(eventDict))
         issueLengthList.append(len(issue))
         participantNumList.append(len(participantDict))
@@ -150,172 +146,136 @@ def efficiency(data):
         coreSubscribeList.append(coreSubscribe)
         normalSubscribeList.append(normalAssign)
 
-    return statistics.mean(resolutionTimeList), statistics.mean(eventNumberList), statistics.mean(issueLengthList), statistics.mean(participantNumList), statistics.mean(coreIssueCommentList), statistics.mean(normalIssueCommentList), statistics.mean(coreAssignList), statistics.mean(normalAssignList), statistics.mean(coreLabelList),statistics.mean(normalLabelList),statistics.mean(coreSubscribeList),statistics.mean(normalSubscribeList)
+    return statistics.mean(eventNumberList), statistics.mean(issueLengthList), statistics.mean(participantNumList), statistics.mean(coreIssueCommentList), statistics.mean(normalIssueCommentList), statistics.mean(coreAssignList), statistics.mean(normalAssignList), statistics.mean(coreLabelList),statistics.mean(normalLabelList),statistics.mean(coreSubscribeList),statistics.mean(normalSubscribeList)
 
-resultPath = "/home/sbh/APSEC/result/2023-09-13T16:31Z/"
-if not os.path.exists(resultPath):
-    os.makedirs(resultPath)
+dataPath = settings.path + "data/"
+resultPath = "/home/sbh/APSEC/result/"
+# path = input("input data path:")
+# resultPath += path + '/'
 
-graphPath = settings.path + "graph/"
-if not os.path.exists(graphPath):
-    os.makedirs(graphPath)
 
-repos = settings.repos
-for issueType in settings.issueTypes:
-    print('issue type: ' + issueType)
-    alphabet = {}
-    i = 0
-    for repo in repos:
-        print(repo)
+# alphabet = {}
+# i = 0
+# for repo in settings.repos:
+#     print(repo)
+#     owner, name = repo.split('/')
+#     repoPath = dataPath + owner + '-' + name + '/'
+#     filenames = os.listdir(repoPath)
+#     for filename in filenames:
+#         f = open(repoPath + filename)
+#         data = json.load(f)
+#         for issue in data:
+#             for group in issue:
+#                 for event in group:
+#                     if event['role'] + event['event'] not in alphabet:
+#                         alphabet[event['role'] + event['event']] = i
+#                         i += 1
+# print(alphabet)
+# break
+alphabet = {'CoreAssignedEvent': 0, 'CoreLabeledEvent': 1, 'NormalRenamedTitleEvent': 2, 'CoreIssueComment': 3, 'CoreClosedEvent': 4, 'CoreLockedEvent': 5, 'CoreCrossReferencedEvent': 6, 'NormalIssueComment': 7, 'CoreSubscribedEvent': 8, 'NormalSubscribedEvent': 9, 'NormalCrossReferencedEvent': 10, 'CoreMilestonedEvent': 11, 'NormalClosedEvent': 12, 'CoreRenamedTitleEvent': 13, 'CoreReferencedEvent': 14, 'CoreReopenedEvent': 15, 'CoreMarkedAsDuplicateEvent': 16, 'NormalReferencedEvent': 17, 'CoreCommentDeletedEvent': 18, 'BotLockedEvent': 19, 'BotLabeledEvent': 20, 'BotIssueComment': 21, 'BotMilestonedEvent': 22, 'BotClosedEvent': 23, 'BotAssignedEvent': 24, 'CoreConnectedEvent': 25, 'CoreTransferredEvent': 26, 'BotReferencedEvent': 27, 'BotCrossReferencedEvent': 28, 'BotSubscribedEvent': 29, 'CoreAddedToProjectEvent': 30, 'CoreMovedColumnsInProjectEvent': 31, 'CorePinnedEvent': 32, 'NormalLabeledEvent': 33, 'CoreRemovedFromProjectEvent': 34, 'CoreConvertedNoteToIssueEvent': 35, 'BotRenamedTitleEvent': 36, 'NormalConnectedEvent': 37, 'NormalMovedColumnsInProjectEvent': 38, 'BotReopenedEvent': 39, 'NormalAddedToProjectEvent': 40, 'NormalCommentDeletedEvent': 41, 'NormalPinnedEvent': 42, 'BotMovedColumnsInProjectEvent': 43, 'BotAddedToProjectEvent': 44, 'CoreConvertedToDiscussionEvent': 45, 'NormalRemovedFromProjectEvent': 46, 'BotRemovedFromProjectEvent': 47, 'NormalConvertedNoteToIssueEvent': 48}
+
+
+entropyList = []
+timeList = []
+eventNumList = []
+isssueLenList = []
+parNumList = []
+projectList = []
+eventList = []
+cIssueList = []
+nIssueList = []
+cAssignList = []
+nAssignList = []
+cLabelList = []
+nLabelList = []
+cSubList = []
+nSubLIst = []
+beforeTimeList = []
+averageTimeList = []
+beforeAverageTransTimeList = []
+sliceTimeList = []
+clusterSizeList = []
+resultPath = '/home/sbh/APSEC/result/2024-03-21T16:30Z/'
+with open(resultPath + 'comparison- 0.5.json') as f:
+    comparisons = json.load(f)
+comparisons = sorted(comparisons, key = lambda x: (x[0], x[1]))
+for repo in settings.repos:
+    # print(repo)
+    beforeTransTimeSum = []
+    transCnt = 0
+    for p in range(len(alphabet)):
+        beforeTransTimeSum.append(0)
+    
+    beforeIssues = []
+    count = 0
+    for com in comparisons:
+        count += 1
+        if com[0] != repo: continue
+        filename = com[1]
+        if filename < '2020-01-01-small.json': continue
+        k = com[4]
+        print(repo, filename, k)
         owner, name = repo.split('/')
-        f = open(resultPath + owner + '-' + name + '_' +  issueType+ '-with-label.json')
-        data = json.load(f)
-        for slice in data:
-            for line in slice:
-                issue = line['issue']
-                for event in issue:
-                    if event['role'] + event['event'] not in alphabet:
-                        alphabet[event['role'] + event['event']] = i
-                        i += 1
-    print(alphabet)
-    # break
+        repoPath = resultPath + owner + '-' + name + '/'
 
-    entropyList = []
-    timeList = []
-    eventNumList = []
-    isssueLenList = []
-    parNumList = []
-    projectList = []
-    eventList = []
-    cIssueList = []
-    nIssueList = []
-    cAssignList = []
-    nAssignList = []
-    cLabelList = []
-    nLabelList = []
-    cSubList = []
-    nSubLIst = []
-    beforeTimeList = []
-    averageTimeList = []
-    beforeAverageTransTimeList = []
-    for repo in repos:
-        print(repo)
-        owner, name = repo.split('/')
-        f = open(resultPath + owner + '-' + name + '_' +  issueType+ '-with-label.json')
-        data = json.load(f)
+        with open(repoPath + filename) as f:
+            labels = json.load(f)
 
-        sum = 0
-        totalTime = 0
-        beforeTransTimeSum = []
-        for p in range(len(alphabet)):
-            beforeTransTimeSum.append(0)
-        print(len(data))
-        for i, slice in enumerate(data):
-            if i == 0: continue
-            # if i > 5: break
-            print(i)
-            tempSlice = data[i - 1]
-            tempK = tempSlice[0]['K']
-            for k in range(tempK):
-                issues = []
-                for line in tempSlice:
-                    label = line['label']
-                    if label != k: continue
-                    issues.append(line['issue'])
-                # print(len(issues))
-                if len(issues) > 100:
-                    for issue in issues:
-                        time = datetime.strptime(issue[-1]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z') - datetime.strptime(issue[0]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
-                        sum += 1
-                        totalTime += time.days
-                        entropy, transTime = analysis(issues, alphabet)
-                        for p in range(len(alphabet)):
-                            beforeTransTimeSum[p] += transTime[p]
-            if sum == 0: continue
-            beforeTime = totalTime / sum
-            beforeTransTimeList = []
-            for p in range(len(alphabet)):
-                beforeTransTimeList.append(beforeTransTimeSum[p] / sum)
-
-            K = slice[0]['K']
+        dataPath = settings.path + "data/" + owner + '-' + name + '/'
+        with open(dataPath + filename) as f:
+            data = json.load(f)
+        
+        #for each cluster, give count result
+        beforeTime = averageTotalTime(beforeIssues)
+        averageTime = averageTotalTime(data)
+        tempEntropy, beforeTransTimeList = analysis(beforeIssues, alphabet) 
+        for p in range(k):
             sum = 0
             totalTime = 0
-            for k in range(K):
-                issues = []
-                for line in tempSlice:
-                    label = line['label']
-                    if label != k: continue
-                    issues.append(line['issue'])
-                # print(len(issues))
-                if len(issues) > 100:
-                    for issue in issues:
-                        time = datetime.strptime(issue[-1]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z') - datetime.strptime(issue[0]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
-                        sum += 1
-                        totalTime += time.days
-            if sum == 0: continue
-            averageTime = totalTime / sum
-        
-            K = slice[0]['K']
-            for k in range(K):
-                issues = []
-                for line in slice:
-                    label = line['label']
-                    if label != k: continue
-                    issues.append(line['issue'])
+            issues = []
+            for i, issue in enumerate(data):
+                if labels[i] != p: continue
+                issues.append(issue)          
+            
+            if beforeIssues != []:
+                eventNum, issueLen, parNum, cIssue, nIssue, cAssign, nAssign, cLabel, nLabel, cSub, nSub = efficiency(issues)
+                entropy, transTime = analysis(issues, alphabet)
+                for key, num in alphabet.items(): 
+                    if entropy[num] == 0: continue
+                    entropyList.append(entropy[num])
+                    timeList.append(transTime[num])
+                    eventNumList.append(eventNum)
+                    isssueLenList.append(issueLen)
+                    parNumList.append(parNum)
+                    projectList.append(repo)
+                    eventList.append(key)
+                    cIssueList.append(cIssue)
+                    nIssueList.append(nIssue)
+                    cAssignList.append(cAssign)
+                    nAssignList.append(nAssign)
+                    cLabelList.append(cLabel)
+                    nLabelList.append(nLabel)
+                    cSubList.append(cSub)
+                    nSubLIst.append(nSub)
+                    beforeTimeList.append(beforeTime)
+                    averageTimeList.append(averageTime)
+                    beforeAverageTransTimeList.append(beforeTransTimeList[num])
+                    sliceTimeList.append(filename.strip('-small.json'))
+                    clusterSizeList.append(len(issues))
+        beforeIssues += data
+    #     if count > 3: break
+    # break
 
-                if len(issues) > 100:
-                    entropy, transTime = analysis(issues, alphabet)
-                    # time, eventNum, issueLen, parNum = efficiency(issues)
-                    time, eventNum, issueLen, parNum, cIssue, nIssue, cAssign, nAssign, cLabel, nLabel, cSub, nSub = efficiency(issues)
-                    for key, num in alphabet.items(): 
-                        if transTime[num] == 0:
-                            continue
-                        entropyList.append(entropy[num])
-                        timeList.append(transTime[num])
-                        eventNumList.append(eventNum)
-                        isssueLenList.append(issueLen)
-                        parNumList.append(parNum)
-                        projectList.append(repo)
-                        eventList.append(key)
-                        cIssueList.append(cIssue)
-                        nIssueList.append(nIssue)
-                        cAssignList.append(cAssign)
-                        nAssignList.append(nAssign)
-                        cLabelList.append(cLabel)
-                        nLabelList.append(nLabel)
-                        cSubList.append(cSub)
-                        nSubLIst.append(nSub)
-                        beforeTimeList.append(beforeTime)
-                        averageTimeList.append(averageTime)
-                        beforeAverageTransTimeList.append(beforeTransTimeList[num])
-    
-    c = {"transition_time": timeList, "event_number": eventNumList, 
-            "issue_length": isssueLenList, "participant_number": parNumList,
-            "entropy": entropyList, "project_name": projectList, "event_name": eventList,
-            'core_issue': cIssueList,
-            "normal_issue": nIssueList, "core_assign": cAssignList, "normal_assign": nAssignList,
-            "core_label": cLabelList, "normal_label": nLabelList, "core_subscribe": cSubList, "normal_subscribe": nSubLIst,
-            "before_average_time": beforeTimeList, "slice_average_time": averageTimeList, "before_trans_time": beforeAverageTransTimeList}
-    result = pd.DataFrame(c)
-    result.to_csv(resultPath +'mean_detailed_with_before_transtime.csv')
-    # for key, num in alphabet.items():
-    #     print('processing..' + key)
-    #     plt.figure(dpi = 300, figsize=(10, 7))
-    #     plt.title(key)
-    #     plt.xlabel("entropy")
-    #     plt.ylabel("average issue resolution time (days)")
-    #     for repo in repos:
-    #         entropyList = []
-    #         timeList = []
-    #         for id, cluster in result.iterrows():
-    #             # print(cluster)
-    #             if cluster['event_name'] == key and cluster['project_name'] == repo:
-    #                 entropyList.append(cluster['entropy'])
-    #                 timeList.append(cluster['transition_time'])
-    #         plt.scatter(entropyList, timeList, s = 1, label = repo)
-    #     plt.legend(fontsize = 5)
-    #     plt.savefig(graphPath + key)
-    #     plt.close()
+c = {"transition_time": timeList, "event_number": eventNumList, 
+        "issue_length": isssueLenList, "participant_number": parNumList,
+        "entropy": entropyList, "project_name": projectList, "event_name": eventList,
+        'core_issue': cIssueList, "normal_issue": nIssueList, "core_assign": cAssignList, "normal_assign": nAssignList,
+        "core_label": cLabelList, "normal_label": nLabelList, "core_subscribe": cSubList, "normal_subscribe": nSubLIst,
+        "before_average_time": beforeTimeList, "slice_average_time": averageTimeList, "before_trans_time": beforeAverageTransTimeList,
+        "slice_time": sliceTimeList, "cluster_size": clusterSizeList}
+result = pd.DataFrame(c)
+print(result)
+result.to_csv(resultPath +'mean_detailed_2020.csv')
 
 
 
