@@ -26,22 +26,16 @@ def Normalize(data):
         data[i] = (x - xmin) / (xmax - xmin)
     return data
 
-def analysis(data):
-    alphabet = {}
-    i = 0
-    for issue in data:
-        for event in issue:
-            if event['role'] + event['event'] not in alphabet:
-                alphabet[event['role'] + event['event']] = i
-                i += 1
-
+def analysis(data, alphabet):
     L = len(alphabet)
     countMatrix = np.zeros((L, L))
     for issue in data:
         for i in range(0, len(issue) - 1):
-            last = issue[i]['role'] + issue[i]['event']
-            present = issue[i + 1]['role'] + issue[i + 1]['event']
-            countMatrix[alphabet[last]][alphabet[present]] += 1
+            for eventLast in issue[i]:
+                for eventNext in issue[i + 1]:
+                    last = eventLast['role'] + eventLast['event']
+                    present = eventNext['role'] + eventNext['event']
+                    countMatrix[alphabet[last]][alphabet[present]] += 1
     
     probMatrix = np.zeros((L, L))
     total = 0
@@ -65,38 +59,19 @@ def analysis(data):
         entropy += sumList[i] / total * e
     return entropy
 
-dataPath = settings.path + "data/"
-if not os.path.exists(dataPath):
-    os.makedirs(dataPath)
-
-currentTime = datetime.now().strftime('%Y-%m-%d' + 'T' + '%H:%M' + 'Z')
-
-resultPath = settings.path + "result/" + currentTime + "/"
-if not os.path.exists(resultPath):
-    os.makedirs(resultPath)
-
-graphPath = settings.path + "graph/"
-if not os.path.exists(graphPath):
-    os.makedirs(graphPath)
-
 def calculateMatrix(issue, alphabet):
     L = len(alphabet)
     countMatrix = np.zeros((L, L))
     sum = 0
     for i in range(0, len(issue) - 1):
-        last = issue[i]['role'] + issue[i]['event']
-        present = issue[i + 1]['role'] + issue[i + 1]['event']
-        countMatrix[alphabet[last]][alphabet[present]] += 1
-        sum += 1
-    
-    # probMatrix = np.zeros((L, L))
-    # for i in range(L):
-    #     sum = 0
-    #     for j in range(L):
-    #         sum += countMatrix[i][j]
-    #     if sum == 0: continue
-    #     for j in range(L):
-    #         probMatrix[i][j] = countMatrix[i][j] / sum
+        for eventLast in issue[i]:
+            for eventNext in issue[i + 1]:
+                # print(eventLast)
+                # print(eventNext)
+                last = eventLast['role'] + eventLast['event']
+                present = eventNext['role'] + eventNext['event']
+                countMatrix[alphabet[last]][alphabet[present]] += 1
+                sum += 1
 
     #changed to overall probability for manhattan distance
     probMatrix = np.zeros((L, L))
@@ -112,156 +87,103 @@ def clusterToLabel(clusters, L):
             labels[id] = num
     return labels
 
-manhattan_metric = distance_metric(type_metric.MANHATTAN)
-for issueType in settings.issueTypes:
-    np.seterr(invalid='ignore')
-    print('issue type: ' + issueType)
+dataPath = settings.path + "data/"
+currentTime = datetime.now().strftime('%Y-%m-%d' + 'T' + '%H:%M' + 'Z')
+resultPath = settings.path + "result/" + currentTime + "/"
+if not os.path.exists(resultPath):
+    os.makedirs(resultPath)
 
-    for repo in settings.repos:
-        alphabet = {}
-        owner, name = repo.split('/')
-        f = open(dataPath + owner + '-' + name + '_' + issueType + '-Outlier.json')
+manhattan_metric = distance_metric(type_metric.MANHATTAN)
+alpha = float(input("input value of alpha:"))
+issueType = 'all'
+result = []
+for repo in settings.repos:
+    print(repo)
+    owner, name = repo.split('/')
+    repoPath = dataPath + owner + '-' + name + '/'
+    filenames = os.listdir(repoPath)
+    resultRepoPath = resultPath + owner + '-' + name + '/'
+    if not os.path.exists(resultRepoPath):
+        os.makedirs(resultRepoPath)
+    # print(filenames)
+    for filename in filenames:
+        if 'small' not in filename: continue
+        f = open(repoPath + filename)
+        # already split data into snapshots and saved in files
         data = json.load(f)
+        alphabet = {}
         i = 0
         for issue in data:
-            for event in issue:
-                if event['role'] + event['event'] not in alphabet:
-                    alphabet[event['role'] + event['event']] = i
-                    i += 1
-        print(repo, ' ', len(data))
-        data = sorted(data, key = lambda x : x[0]['time'])
-        result = []
+            for group in issue:
+                for event in group:
+                    if event['role'] + event['event'] not in alphabet:
+                        alphabet[event['role'] + event['event']] = i
+                        i += 1
+        # print(alphabet)
+        print(filename, len(data))
+       
+        matrices = []
+        for issue in data:
+            matrices.append(calculateMatrix(issue, alphabet))
+        matrix = np.array(matrices)
 
-        leftTime = datetime.strptime(data[0][0]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
-        rightTime = leftTime + relativedelta(months=+settings.windowLength)
-        topElbow = 0
-        lowElbow = 10
-        topScore = 0
-        lowScore = 10
-        alpha = 0.4
-        while True:
-            print('repo:', repo, 'leftTime: ', leftTime, ' rightTime: ', rightTime)
-            slice = []
-            for issue in data:
-                issueTime = datetime.strptime(issue[0]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
-                if (issueTime >= leftTime) and (issueTime < rightTime):
-                    slice.append(issue)
-                if issueTime >= rightTime:
-                    break
-            print('slice size: ', len(slice))
-            if len(slice) > 100:
-                matrices = []
-                for issue in slice:
-                    matrices.append(calculateMatrix(issue, alphabet))
-                matrix = np.array(matrices)
+        entropyList = []
+        deltaEntropyList = []
+        scoreList = []
+        baseEntropy = analysis(data, alphabet)
+        resultLabels = []
+        # test for approiate K with Silhouette score and entropy minimization
+        for k in range(2, 10):
+            print('algorithm:', k)
+            initial_centers = kmeans_plusplus_initializer(matrices, k).initialize()
+            kmeans_instance = kmeans(matrices, initial_centers, metric = manhattan_metric)
+            kmeans_instance.process()
+            clusters = kmeans_instance.get_clusters()
+            labels = clusterToLabel(clusters, len(data))
+            sList = silhouette(matrices, clusters).process().get_score()
+            score  = statistics.mean(sList)
 
-                elbowList = []
-                scoreList = []
-                originEntropyList = []
-                baseEntropy = analysis(slice)
+            totalEntropy = 0
+            originEntropy = 0
+            for j in range(k):
+                tempData = []
+                for p, issue in enumerate(data):
+                    if labels[p] == j:
+                        tempData.append(issue)
+                entropy = analysis(tempData, alphabet)
+                originEntropy += len(tempData) / len(data) * entropy
+            deltaEntropy = baseEntropy - originEntropy
+            
+            deltaEntropyList.append(deltaEntropy)
+            entropyList.append(originEntropy)
+            scoreList.append(score)
+            resultLabels.append(list(labels))
 
-                # test for approiate K with Silhouette score and entropy minimization
-                for k in range(2, 11):
-                    entropyList = []
-                    # kmeans = KMeans(init = 'k-means++', n_clusters=k)
-                    # kmeans.fit(matrices)
-                    # labels = kmeans.labels_
-                    # score = silhouette_score(matrices, labels)
-                    initial_centers = kmeans_plusplus_initializer(matrices, k).initialize()
-                    kmeans_instance = kmeans(matrices, initial_centers, metric = manhattan_metric)
-                    kmeans_instance.process()
-                    clusters = kmeans_instance.get_clusters()
-                    labels = clusterToLabel(clusters, len(slice))
-                    sList = silhouette(matrices, clusters).process().get_score()
-                    score  = statistics.mean(sList)
-                    # print(labels)
-                    # print(score)
-                    # break
+        # print(entropyList)
+        # print(deltaEntropyList)
+        deltaEntropyList = Normalize(deltaEntropyList)
+        # print(deltaEntropyList)
+        scoreList = Normalize(scoreList)
+        metricList = []
+        for k in range(len(deltaEntropyList)):
+            metricList.append(alpha * deltaEntropyList[k] + (1 - alpha) * scoreList[k])
 
-                    totalEntropy = 0
-                    originEntropy = 0
-                    for j in range(k):
-                        tempData = []
-                        for p, issue in enumerate(slice):
-                            if labels[p] == j:
-                                tempData.append(issue)
-                        entropy = analysis(tempData)
-                        originEntropy += len(tempData) / len(slice) * entropy
-                        totalEntropy += (baseEntropy - entropy) / max(baseEntropy, entropy) * len(tempData) / len(slice)
-                    
-                    elbowList.append(totalEntropy)
-                    scoreList.append(score)
-                    originEntropyList.append(originEntropy)
+        maxOriginScore = max(scoreList)
+        originalK = scoreList.index(maxOriginScore) + 2
 
-                elbowList = Normalize(elbowList)
-                scoreList = Normalize(scoreList)
-                metricList = []
-                for k in range(len(elbowList)):
-                    metricList.append(alpha * elbowList[k] + (1 - alpha) * scoreList[k])
-                # print(metricList)
+        maxMetric = max(metricList)
+        optK = metricList.index(maxMetric) + 2
 
-                optMetric = -1
-                optK = 2
-                for k in range(len(metricList)):
-                    if metricList[k] > optMetric:
-                        optMetric = metricList[k]
-                        optK = k
+        result.append([repo, filename, originalK, entropyList[originalK - 2], optK, entropyList[optK -2]])
 
-                optK += 2
-                # kmeans = KMeans(init = 'k-means++', n_clusters = optK) 
-                # kmeans.fit(matrices)
-                # labels = kmeans.labels_
-                initial_centers = kmeans_plusplus_initializer(matrices, optK).initialize()
-                kmeans_instance = kmeans(matrices, initial_centers, metric = manhattan_metric)
-                kmeans_instance.process()
-                clusters = kmeans_instance.get_clusters()
-                labels = clusterToLabel(clusters, len(slice))
+        with open(resultPath + 'comparison-' + str(alpha)+ '.txt', 'a') as f:
+                    f.write(repo + ' ' + str(originalK) + ' ' + str(entropyList[originalK - 2]) + ' ' + str(optK) + ' ' + str(entropyList[optK -2]) + '\n')
+        with open(resultRepoPath + filename, 'w') as f:
+            json.dump(resultLabels[optK - 2], f)
+        print(optK)
+        # print(resultLabels[optK - 2])
+    #     break
+    # break
 
-                sliceResult = []
-                for number, issue in enumerate(slice):
-                    info = {}
-                    info['issue'] = issue
-                    info['label'] = int(labels[number])
-                    info['K'] = optK
-                    sliceResult.append(info)
-
-                # print('chosen K: ', optK)
-                result.append(sliceResult)
-
-                sMetric = -1
-                originK = 0
-                for k in range(len(scoreList)):
-                    if scoreList[k] > sMetric:
-                        sMetric = scoreList[k]
-                        originK = k
-                originK += 2
-                initial_centers = kmeans_plusplus_initializer(matrices, originK).initialize()
-                kmeans_instance = kmeans(matrices, initial_centers, metric = manhattan_metric)
-                kmeans_instance.process()
-                clusters = kmeans_instance.get_clusters()
-                labels = clusterToLabel(clusters, len(slice))
-                originEntropy = 0
-                for j in range(originK):
-                    tempData = []
-                    for p, issue in enumerate(slice):
-                        if labels[p] == j:
-                            tempData.append(issue)
-                    entropy = analysis(tempData)
-                    originEntropy += len(tempData) / len(slice) * entropy
-                # originEntropy = analysis(slice)
-                print(repo + ' ' + str(originK) + ' ' + str(originEntropy) + ' ' + str(optK) + ' ' + str(originEntropyList[optK - 2]))
-                with open(resultPath + 'comparison.txt', 'a') as f:
-                    f.write(repo + ' ' + str(originK) + ' ' + str(originEntropy) + ' ' + str(optK) + ' ' + str(originEntropyList[optK - 2]) + '\n')
-
-            leftTime += relativedelta(months=+settings.stepLength)
-            rightTime = leftTime + relativedelta(months=+settings.windowLength)
-            if leftTime > datetime.strptime(data[-1][0]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z'):
-                break
-            # break
-
-        with open(resultPath + owner + '-' + name + '_' +  issueType+ '-with-label.json', 'w') as f:
-            json.dump(result, f)
-   
-
-
-        
+with open(resultPath + 'comparison- ' + str(alpha) + '.json', 'w') as f:
+    json.dump(result, f)
