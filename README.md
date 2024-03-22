@@ -15,6 +15,9 @@ fetch original data from database and store the necessary information to local f
 ### issue_prepocess.py
 process issue data to issue sequence
 
+### issue_time_split.py
+split issue data into 1 month snapshot
+
 ### kmeans_clustering.py
 augmented kmeans++ clustering algorithm
 
@@ -23,6 +26,9 @@ calculate variables for RQ2
 
 ### detailed_resolution.py
 calculate variables for RQ3
+
+### algorithm_effectiveness.py
+single sided Mann-Whitney U test for RQ1
 
 ### analysis_marco.r
 R file to build GLMM models for RQ2
