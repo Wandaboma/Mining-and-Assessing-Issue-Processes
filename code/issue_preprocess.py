@@ -107,36 +107,6 @@ for repo in settings.repos:
         for event in issue:
             if event['event'] in mergeCaseDict:
                 event['event'] = mergeCaseDict[event['event']]
-    
-    # data = [[{'actor': 'alan-agius4', 'time': '2022-02-12T19:18:37Z', 'event': 'IssueComment'}, 
-    #          {'actor': 'alan-agius4', 'time': '2022-02-12T19:18:37Z', 'event': 'MilestonedEvent'},
-    #            {'actor': 'alan-agius4', 'time': '2022-02-12T19:18:37Z', 'event': 'LabeledEvent'}, 
-    #            {'actor': 'alan-agius4', 'time': '2022-02-12T19:16:37Z', 'event': 'IssueComment'}]]
-    #sort parallel event
-    result = []
-    for issue in data:
-        i = 0
-        L = len(issue)
-        timeLine = []
-        while i < L:
-            time = issue[i]['time']
-            name = issue[i]['actor']
-            group = []
-            group.append(issue[i])
-            j = i + 1
-            while j < L:
-                nowTime = issue[j]['time']
-                nowName = issue[j]['actor']
-                if (nowTime == time) and (nowName == name):
-                    group.append(issue[j])
-                    j = j + 1
-                else:
-                    break
-            group = sorted(group, key=lambda x: x['event'])
-            timeLine = timeLine + group
-            i = j
-        result.append(timeLine)   
-    data = result
    
     #get role
     CONNECTION_STRING = "mongodb://sbh:sbh123456@172.27.135.32:27017/?authSource=ghdb&readPreference=primary&appname=MongoDB%20Compass&directConnection=true&ssl=false"
@@ -247,41 +217,36 @@ for repo in settings.repos:
         result.append(issue)
     data = result
 
-
-    #get global order
-    nameDict = {}
+    # data = [[{'actor': 'alan-agius4', 'time': '2022-02-12T19:18:37Z', 'event': 'IssueComment'}, 
+    #          {'actor': 'alan-agius4', 'time': '2022-02-12T19:18:37Z', 'event': 'MilestonedEvent'},
+    #            {'actor': 'alan-agius4', 'time': '2022-02-12T19:18:37Z', 'event': 'LabeledEvent'}, 
+    #            {'actor': 'alan-agius4', 'time': '2022-02-12T19:16:37Z', 'event': 'IssueComment'}]]
+    #sort parallel event，reorganize the data
+    result = []
     for issue in data:
-        for event in issue:
-            name = event['actor']
-            if name not in nameDict:
-                nameDict[name] = 1
-            else:
-                nameDict[name] += 1
-    nameList = sorted(nameDict.items(), key = lambda kv:(kv[1], kv[0]), reverse=True)
-
-    globalOrder = {}
-    i = 0
-    for name, num in nameList:
-        globalOrder[name] = i
-        i += 1
-
-    for issue in data:
-        for event in issue:
-            event['gOrder'] = globalOrder[event['actor']]
-    
-    #get local order
-    for issue in data:
-        nameDict = {}
         i = 0
-        for event in issue:
-            name = event['actor']
-            if name not in nameDict:
-                nameDict[name] = i
-                i += 1
-        for event in issue:
-            event['lOrder'] = nameDict[event['actor']]
+        L = len(issue)
+        timeLine = []
+        while i < L:
+            time = issue[i]['time']
+            name = issue[i]['actor']
+            group = []
+            group.append(issue[i])
+            j = i + 1
+            while j < L:
+                nowTime = issue[j]['time']
+                nowName = issue[j]['actor']
+                if (nowTime == time) and (nowName == name):
+                    group.append(issue[j])
+                    j = j + 1
+                else:
+                    break
+            timeLine.append(group)
+            i = j
+        result.append(timeLine)   
+    data = result
 
     with open(dataPath + repo_owner + '-' + repo_name + '_' + issueType + '-Outlier.json', 'w') as f:
         json.dump(data, f)
-    # break
+
 
