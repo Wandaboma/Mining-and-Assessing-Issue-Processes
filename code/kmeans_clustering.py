@@ -1,189 +1,252 @@
-from typing import List
+#process data into standard formats
 import json
-import os
-import numpy as np
-from queue import PriorityQueue
-import math
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-from multiprocessing import Pool
-import settings
+from pymongo import MongoClient
+import re
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from sklearn.cluster import KMeans
-import scipy
+import settings
+import os
 import statistics
-from sklearn.metrics import silhouette_score
-from pyclustering.cluster.kmeans import kmeans
-from pyclustering.cluster.center_initializer import kmeans_plusplus_initializer
-from pyclustering.utils.metric import type_metric, distance_metric
-from pyclustering.cluster.silhouette import silhouette
-
-def Normalize(data):
-    xmin = min(data)
-    xmax = max(data)
-    for i, x in enumerate(data):
-        data[i] = (x - xmin) / (xmax - xmin)
-    return data
-
-def analysis(data, alphabet):
-    L = len(alphabet)
-    countMatrix = np.zeros((L, L))
-    for issue in data:
-        for i in range(0, len(issue) - 1):
-            for eventLast in issue[i]:
-                for eventNext in issue[i + 1]:
-                    last = eventLast['role'] + eventLast['event']
-                    present = eventNext['role'] + eventNext['event']
-                    countMatrix[alphabet[last]][alphabet[present]] += 1
-    
-    probMatrix = np.zeros((L, L))
-    total = 0
-    entropy = 0
-    sumList = []
-    for i in range(L):
-        sum = 0
-        for j in range(L):
-            sum += countMatrix[i][j]
-        sumList.append(sum)
-        if sum == 0: continue
-        total += sum
-        for j in range(L):
-            probMatrix[i][j] = countMatrix[i][j] / sum
-        
-    for i in range(L):
-        e = 0
-        for j in range(L):
-            if probMatrix[i][j] != 0:
-                e -= probMatrix[i][j] * math.log(probMatrix[i][j])
-        entropy += sumList[i] / total * e
-    return entropy
-
-def calculateMatrix(issue, alphabet):
-    L = len(alphabet)
-    countMatrix = np.zeros((L, L))
-    sum = 0
-    for i in range(0, len(issue) - 1):
-        for eventLast in issue[i]:
-            for eventNext in issue[i + 1]:
-                # print(eventLast)
-                # print(eventNext)
-                last = eventLast['role'] + eventLast['event']
-                present = eventNext['role'] + eventNext['event']
-                countMatrix[alphabet[last]][alphabet[present]] += 1
-                sum += 1
-
-    #changed to overall probability for manhattan distance
-    probMatrix = np.zeros((L, L))
-    for i in range(L):
-        for j in range(L):
-            probMatrix[i][j] = countMatrix[i][j] / sum
-    return probMatrix.flatten()
-
-def clusterToLabel(clusters, L):
-    labels = np.zeros((L))
-    for num, cluster in enumerate(clusters):
-        for id in cluster:
-            labels[id] = num
-    return labels
 
 dataPath = settings.path + "data/"
-currentTime = datetime.now().strftime('%Y-%m-%d' + 'T' + '%H:%M' + 'Z')
-resultPath = settings.path + "result/" + currentTime + "/"
-if not os.path.exists(resultPath):
-    os.makedirs(resultPath)
+if not os.path.exists(dataPath):
+    os.makedirs(dataPath)
 
-manhattan_metric = distance_metric(type_metric.MANHATTAN)
-alpha = float(input("input value of alpha:"))
+bot_re_list = [re.compile(".*\[[Bb][Oo][Tt]\].*"),
+               re.compile(".*-[Bb][Oo][Tt][^A-Za-z]*.*"),
+               re.compile(".*[\W0-9_][Bb][Oo][Tt]$"),
+               re.compile("^[Bb][Oo][Tt][\W0-9_].*"),
+               re.compile(".*[\W0-9_][Bb][Oo][Tt][\W0-9_].*")]
+
+bot_list = ['google-ml-butler', 'github-actions']
+def __is_bot(login):
+    '''
+        helper function, return true if login is bot
+    '''
+    for botre in bot_re_list:
+        if re.match(botre, login):
+            return True
+    for specialName in bot_list:
+        if specialName == login:
+            return True
+    return False
+
+# repos = ['angular/angular', 'tensorflow/tensorflow', 'microsoft/vscode']
+# repos = ['tensorflow/tensorflow', 'pytorch/pytorch']
 issueType = 'all'
-result = []
 for repo in settings.repos:
     print(repo)
-    owner, name = repo.split('/')
-    repoPath = dataPath + owner + '-' + name + '/'
-    filenames = os.listdir(repoPath)
-    resultRepoPath = resultPath + owner + '-' + name + '/'
-    if not os.path.exists(resultRepoPath):
-        os.makedirs(resultRepoPath)
-    # print(filenames)
-    for filename in filenames:
-        if 'small' not in filename: continue
-        f = open(repoPath + filename)
-        # already split data into snapshots and saved in files
-        data = json.load(f)
-        alphabet = {}
+    repo_owner, repo_name = repo.split('/')
+    f = open(dataPath + repo_owner + '-' + repo_name + '_' + issueType + '.json', 'r')
+    data = json.load(f)
+    print('total issue num:', len(data))
+
+    #only keep time, actor, event information
+    result = []
+    for issue in data:
+        resultIssue = []
+        for event in issue:
+            if 'actor' in event['data']:
+                name = event['data']['actor']['login']
+            else:
+                name = event['data']['author']['login']
+            time = event['data']['createdAt']
+            eventType = event['data']['__typename']
+            newEvent = {'actor': name, 'time': time, 'event': eventType, 'id': event['id']}
+            resultIssue.append(newEvent)
+        result.append(resultIssue)
+    data = result
+
+    # remove issue with unusual length and unsual resolution time
+    issueLengthList = []
+    resolutionTimeList = []
+    for issue in data:
+        issueLengthList.append(len(issue))
+        issuetime = datetime.strptime(issue[-1]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z') - datetime.strptime(issue[0]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
+        resolutionTimeList.append(issuetime.days)
+    quantiles = statistics.quantiles(issueLengthList, n=4, method='inclusive')
+    Q1 = quantiles[0]
+    Q3 = quantiles[2]
+    upper = Q3 + 1.5 * (Q3 - Q1)
+    lower = Q1 - 1.5 * (Q3 - Q1)
+    print('issue length bound: ', upper, '   ', lower)
+    result = []
+    for issue in data:
+        if len(issue) > upper or len(issue) < lower:
+            continue
+        result.append(issue)
+    data = result
+
+    quantiles = statistics.quantiles(resolutionTimeList, n=4, method='inclusive')
+    Q1 = quantiles[0]
+    Q3 = quantiles[2]
+    upper = Q3 + 1.5 * (Q3 - Q1)
+    lower = Q1 - 1.5 * (Q3 - Q1)
+    print('issue resolution time bound: ', upper, '   ', lower)
+    result = []
+    for issue in data:
+        issuetime = (datetime.strptime(issue[-1]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z') - datetime.strptime(issue[0]['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')).days
+        if issuetime > upper or issuetime < lower:
+            continue
+        result.append(issue)
+    data = result
+    print('issue num without:', len(data))
+
+    #merge same event
+    mergeCaseDict = {'AssignedEvent': 'AssignedEvent', 'UnassignedEvent': 'AssignedEvent',
+                     'LabeledEvent': 'LabeledEvent', 'UnlabeledEvent': 'LabeledEvent',
+                     'MilestonedEvent': 'MilestonedEvent', 'DemilestonedEvent': 'MilestonedEvent',
+                     'LockedEvent': 'LockedEvent', 'UnlockedEvent': 'LockedEvent',
+                     'MarkedAsDuplicateEvent': 'MarkedAsDuplicateEvent',
+                     'UnmarkedAsDuplicateEvent': 'MarkedAsDuplicateEvent',
+                     'PinnedEvent': 'PinnedEvent', 'UnpinnedEvent': 'PinnedEvent',
+                     'SubscribedEvent': 'SubscribedEvent', 'UnsubscribedEvent': 'SubscribedEvent',
+                     'MentionedEvent': 'SubscribedEvent',
+                     'ConnectedEvent': 'ConnectedEvent', 'DisconnectedEvent': 'ConnectedEvent'}
+    for issue in data:
+        for event in issue:
+            if event['event'] in mergeCaseDict:
+                event['event'] = mergeCaseDict[event['event']]
+   
+    #get role
+    CONNECTION_STRING = "mongodb://sbh:sbh123456@172.27.135.32:27017/?authSource=ghdb&readPreference=primary&appname=MongoDB%20Compass&directConnection=true&ssl=false"
+    client = MongoClient(CONNECTION_STRING)
+    _db = client['ghdb']
+    issueCollection = _db['issue']
+    issueCreator = {}
+    for issue in data:
+        # print(issue)
+        num = issue[0]['id']
+        for result in issueCollection.find({'index.repo_owner': repo_owner, 'index.repo_name': repo_name, 'index.number': num}):
+            if 'author' in result['data']['repository']['issue']:
+                name = result['data']['repository']['issue']['author']['login']
+                issueCreator[result['index']['number']] = name
+
+
+    writeAccess = {'LabeledEvent', 'ClosedEvent', 'ReopenedEvent', 'AssignedEvent', 'MilestonedEvent',
+                   'MarkedAsDuplicateEvent', 'TransferredEvent', 'LockedEvent'}
+    nameDict = {}
+    for issue in data:
+        for event in issue:
+            eventType = event['event']
+            name = event['actor']
+            if eventType in writeAccess:
+                if eventType == 'ClosedEvent' or eventType == 'LabeledEvent':
+                    flag = False
+                    if event['id'] not in issueCreator:
+                        flag = False
+                    elif issueCreator[event['id']] == name:
+                        flag = True
+                    if flag == False:
+                        nameDict[name] = 1
+                else:
+                    nameDict[name] = 1
+
+    print('elite people number: ' + str(len(nameDict)))
+    eliteTimetable = {}
+    nameList = list(nameDict.keys())
+    for i in range(len(nameDict)):
+        name = nameList[i]
+        timeList = []
+        for issue in data:
+            for event in issue:
+                if event['actor'] != name: continue
+                eventType = event['event']
+                if eventType in writeAccess:
+                    if eventType == 'ClosedEvent' or eventType == 'LabeledEvent':
+                        flag = False
+                        if event['id'] not in issueCreator:
+                            flag = False
+                        elif issueCreator[event['id']] == name:
+                            flag = True
+                        if flag == False:
+                            timeList.append(event['time'])
+                    else:
+                        timeList.append(event['time'])
+        timeList = list(set(timeList))
+        timeList.sort()
+        #merge time slots so it can be quicker
+        mergedTimeList = []
+        leftTime = datetime.strptime(timeList[0], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
+        rightTime = leftTime + relativedelta(months=+3)
+        for i in range(1, len(timeList)):
+            nowTime = datetime.strptime(timeList[i], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
+            if (leftTime <= nowTime) and (nowTime <= rightTime):
+                rightTime = nowTime + relativedelta(months=+3)
+            elif nowTime > rightTime:
+                mergedTimeList.append((leftTime, rightTime))
+                leftTime = nowTime
+                rightTime = leftTime + relativedelta(months=+3)
+        mergedTimeList.append((leftTime, rightTime))
+        eliteTimetable[name] = mergedTimeList
+
+    print('start to classify roles')
+    for issue in data:
+        for event in issue:
+            name = event['actor']
+            event['role'] = 'Normal'
+            if name in eliteTimetable:
+                flag = False
+                eventTime = datetime.strptime(event['time'], '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
+                for leftTime, rightTime in eliteTimetable[name]:
+                    # leftTime = datetime.strptime(time, '%Y-%m-%d' + 'T' + '%H:%M:%S' + 'Z')
+                    # rightTime = leftTime + relativedelta(months=+3)
+                    if (leftTime <= eventTime) and (eventTime <= rightTime):
+                        flag = True
+                        break
+                    elif eventTime < leftTime:
+                        break
+                if flag:
+                    event['role'] = 'Core'
+            if __is_bot(name):
+                event['role'] = 'Bot'
+    
+    # rule out issue doesn't satisfy the requirement
+    print('rule out too short issues')
+    result = []
+    for issue in data:
+        if len(issue) < 3: continue
+        botDict = {}
+        humanDict = {}
+        for event in issue:
+            if event['role'] == 'Bot':
+                botDict[event['actor']] = 1
+            else:
+                humanDict[event['actor']] = 1
+        if len(humanDict) < 2: continue
+        result.append(issue)
+    data = result
+
+    # data = [[{'actor': 'alan-agius4', 'time': '2022-02-12T19:18:37Z', 'event': 'IssueComment'}, 
+    #          {'actor': 'alan-agius4', 'time': '2022-02-12T19:18:37Z', 'event': 'MilestonedEvent'},
+    #            {'actor': 'alan-agius4', 'time': '2022-02-12T19:18:37Z', 'event': 'LabeledEvent'}, 
+    #            {'actor': 'alan-agius4', 'time': '2022-02-12T19:16:37Z', 'event': 'IssueComment'}]]
+    #sort parallel event，reorganize the data
+    result = []
+    for issue in data:
         i = 0
-        for issue in data:
-            for group in issue:
-                for event in group:
-                    if event['role'] + event['event'] not in alphabet:
-                        alphabet[event['role'] + event['event']] = i
-                        i += 1
-        # print(alphabet)
-        print(filename, len(data))
-       
-        matrices = []
-        for issue in data:
-            matrices.append(calculateMatrix(issue, alphabet))
-        matrix = np.array(matrices)
+        L = len(issue)
+        timeLine = []
+        while i < L:
+            time = issue[i]['time']
+            name = issue[i]['actor']
+            group = []
+            group.append(issue[i])
+            j = i + 1
+            while j < L:
+                nowTime = issue[j]['time']
+                nowName = issue[j]['actor']
+                if (nowTime == time) and (nowName == name):
+                    group.append(issue[j])
+                    j = j + 1
+                else:
+                    break
+            timeLine.append(group)
+            i = j
+        result.append(timeLine)   
+    data = result
 
-        entropyList = []
-        deltaEntropyList = []
-        scoreList = []
-        baseEntropy = analysis(data, alphabet)
-        resultLabels = []
-        # test for approiate K with Silhouette score and entropy minimization
-        for k in range(2, 10):
-            print('algorithm:', k)
-            initial_centers = kmeans_plusplus_initializer(matrices, k).initialize()
-            kmeans_instance = kmeans(matrices, initial_centers, metric = manhattan_metric)
-            kmeans_instance.process()
-            clusters = kmeans_instance.get_clusters()
-            labels = clusterToLabel(clusters, len(data))
-            sList = silhouette(matrices, clusters).process().get_score()
-            score  = statistics.mean(sList)
+    with open(dataPath + repo_owner + '-' + repo_name + '_' + issueType + '-Outlier.json', 'w') as f:
+        json.dump(data, f)
 
-            totalEntropy = 0
-            originEntropy = 0
-            for j in range(k):
-                tempData = []
-                for p, issue in enumerate(data):
-                    if labels[p] == j:
-                        tempData.append(issue)
-                entropy = analysis(tempData, alphabet)
-                originEntropy += len(tempData) / len(data) * entropy
-            deltaEntropy = baseEntropy - originEntropy
-            
-            deltaEntropyList.append(deltaEntropy)
-            entropyList.append(originEntropy)
-            scoreList.append(score)
-            resultLabels.append(list(labels))
 
-        # print(entropyList)
-        # print(deltaEntropyList)
-        deltaEntropyList = Normalize(deltaEntropyList)
-        # print(deltaEntropyList)
-        scoreList = Normalize(scoreList)
-        metricList = []
-        for k in range(len(deltaEntropyList)):
-            metricList.append(alpha * deltaEntropyList[k] + (1 - alpha) * scoreList[k])
-
-        maxOriginScore = max(scoreList)
-        originalK = scoreList.index(maxOriginScore) + 2
-
-        maxMetric = max(metricList)
-        optK = metricList.index(maxMetric) + 2
-
-        result.append([repo, filename, originalK, entropyList[originalK - 2], optK, entropyList[optK -2]])
-
-        with open(resultPath + 'comparison-' + str(alpha)+ '.txt', 'a') as f:
-                    f.write(repo + ' ' + str(originalK) + ' ' + str(entropyList[originalK - 2]) + ' ' + str(optK) + ' ' + str(entropyList[optK -2]) + '\n')
-        with open(resultRepoPath + filename, 'w') as f:
-            json.dump(resultLabels[optK - 2], f)
-        print(optK)
-        # print(resultLabels[optK - 2])
-    #     break
-    # break
-
-with open(resultPath + 'comparison- ' + str(alpha) + '.json', 'w') as f:
-    json.dump(result, f)
