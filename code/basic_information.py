@@ -12,7 +12,7 @@ def timedelta_to_months(td):
     total_months = total_days / days_in_month
     return total_months
 
-client = pymongo.MongoClient("mongodb://root:workwork@172.27.135.32:27017/?authSource=admin")
+client = pymongo.MongoClient("location")
 # db_issue = client['ghdb']['issue']
 # issueDict = {}
 # for repo in settings.repos:
