@@ -7,7 +7,7 @@ import os
 dataPath = settings.path + "data/"
 if not os.path.exists(dataPath):
     os.makedirs(dataPath)
-client = pymongo.MongoClient("mongodb://root:workwork@172.27.135.32:27017/?authSource=admin")
+client = pymongo.MongoClient("***")
 db_label = client['ghdb']['issueLabel']
 db_timeline = client['ghdb']['issueTimeline']
 
