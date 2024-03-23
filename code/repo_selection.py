@@ -5,7 +5,7 @@ from pymongo import ASCENDING
 import json
 import os
 
-client = pymongo.MongoClient("mongodb://root:workwork@172.27.135.32:27017/?authSource=admin")
+client = pymongo.MongoClient("***")
 db_star = client['ghdb']['issue']
 
 repo_dict = {}
