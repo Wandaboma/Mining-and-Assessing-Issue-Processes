@@ -109,7 +109,7 @@ for repo in settings.repos:
                 event['event'] = mergeCaseDict[event['event']]
    
     #get role
-    CONNECTION_STRING = "mongodb://sbh:sbh123456@172.27.135.32:27017/?authSource=ghdb&readPreference=primary&appname=MongoDB%20Compass&directConnection=true&ssl=false"
+    CONNECTION_STRING = "**"
     client = MongoClient(CONNECTION_STRING)
     _db = client['ghdb']
     issueCollection = _db['issue']
