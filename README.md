@@ -41,3 +41,9 @@ R file to build GLMM models at event level for RQ3
 
 ## Data
 Data and results used in the experiment are stored in data folder. Raw data is omitted due to over limit file size. 
+### list_of_events.txt
+contain all the event in the data
+### mean.csv
+data for RQ2
+### mean_detailed_2020.csv
+data for RQ3
