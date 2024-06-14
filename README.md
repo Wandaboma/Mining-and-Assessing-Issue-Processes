@@ -39,9 +39,11 @@ Augmented kmeans++ clustering algorithm
 ### entropy-resolution.py
 Calculate variables for RQ2, including control variables, independent variables and dependent variables
 
+Output file: mean.csv
 ### detailed_resolution.py
-calculate variables for RQ3, including control variables, independent variables and dependent variables
+Calculate variables for RQ3, including control variables, independent variables and dependent variables
 
+Output file: mean_detailed.csv
 ### algorithm_effectiveness.py
 Perform single sided Mann-Whitney U test for RQ1, comparing the result of original clustering algorithm and our proposed clustering algorithm.
 
@@ -53,9 +55,11 @@ R file to build GLMM models for RQ2
 ### analysis_mirco.r
 R file to build GLMM models for RQ3
 
+Input file: mean.csv
 ### analysis-event-mirco.r
 R file to build GLMM models at event level for RQ3
 
+Input file: mean_detailed.csv
 ## Execution
 For code execution, run the code in the order above.
 1. set the output path and repo list
@@ -71,6 +75,6 @@ Data and results used in the experiment are stored in data folder. Raw data is o
 ### list_of_events.txt
 contain all the event in the data
 ### mean.csv
-data for RQ2
-### mean_detailed_2020.csv
-data for RQ3
+data for RQ2, used as input for analysis_marco.r
+### mean_detailed.csv
+data for RQ3, used as input for analysis_mirco.r
