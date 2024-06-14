@@ -27,10 +27,14 @@ Process issue data from original raw file to issue sequence.
 4. Set role for each event actor in the issue, as core developer, non-core developer and bots
 
 ### issue_time_split.py
-Split issue data into 1 month snapshot and save it to files
+Split issue data into 1 month snapshot and save it to files.
 
 ### kmeans_clustering.py
-augmented kmeans++ clustering algorithm
+Augmented kmeans++ clustering algorithm
+1. read in each month's issue file
+2. **function calculateMatrix**: calculate each issue sequence's corresponding DFG-probability matrix, and use them as input vector
+3. run Kmeans++ algorithm in range and store result of each K value
+4. choose the optimal K by proposed metrics
 
 ### entropy-resolution.py
 calculate variables for RQ2
