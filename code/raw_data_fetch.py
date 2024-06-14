@@ -11,8 +11,7 @@ client = pymongo.MongoClient("***")
 db_label = client['ghdb']['issueLabel']
 db_timeline = client['ghdb']['issueTimeline']
 
-# repos = ['tensorflow/tensorflow', 'pytorch/pytorch']
-#find bug type issue
+# find issue for each repo
 issueType = 'all'
 for repo in settings.repos:
     print(repo)
