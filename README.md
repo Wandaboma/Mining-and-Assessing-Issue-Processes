@@ -20,10 +20,14 @@ Fetch original issue timeline data from database and store the necessary informa
 Rule out the issue data lack of time info or actor info.
 
 ### issue_prepocess.py
-process issue data to issue sequence
+Process issue data from original raw file to issue sequence.
+1. First, save necessary infomation only, which is time, actor and event information
+2. Remove abnormal data with unusual length and unsual resolution time
+3. Merge same events, e.g.:Label event and unlabel event
+4. Set role for each event actor in the issue, as core developer, non-core developer and bots
 
 ### issue_time_split.py
-split issue data into 1 month snapshot
+Split issue data into 1 month snapshot and save it to files
 
 ### kmeans_clustering.py
 augmented kmeans++ clustering algorithm
