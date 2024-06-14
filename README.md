@@ -15,7 +15,9 @@ First connect to database that stores issue infomation, then select repository w
 In the code we output top 40 repos with the most number of issues.
 
 ### raw_data_fetch.py
-fetch original data from database and store the necessary information to local file
+Fetch original issue timeline data from database and store the necessary information to local file.
+
+Rule out the issue data lack of time info or actor info.
 
 ### issue_prepocess.py
 process issue data to issue sequence
