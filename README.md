@@ -1,11 +1,13 @@
-# Mining-and-Assessing-Issue-Processes
+![image](https://github.com/Wandaboma/Mining-and-Assessing-Issue-Processes/assets/42309408/149e7581-4ab1-4c05-9a8c-c9ac1a8d79a8)# Mining-and-Assessing-Issue-Processes
 Mining and Assessing Issue Processes In Open Source Software Repositories with Information Entropy
 
 ## Code
 Source code of the experiment is at code folder
 ### settings.py
 arguments setting file
-
+1. **path** : sets where the data, result and graph save to
+2. **repos**: list of repos used for the experiment
+3. **issueTypes**: originally designed for different types of issues, can be omitted this time
 ### repo_selection.py
 select repository with the most stars from database
 
