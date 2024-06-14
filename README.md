@@ -44,6 +44,16 @@ R file to build GLMM models for RQ3
 ### analysis-event-mirco.r
 R file to build GLMM models at event level for RQ3
 
+## Execution
+For code execution, run the code in the order above.
+1. set the output path and repo list
+2. connect to database
+3. collect issue data
+4. preprocess issue data
+5. run clustering algorithm
+6. run counting code
+7. run linear regression model code
+   
 ## Data
 Data and results used in the experiment are stored in data folder. Raw data is omitted due to over limit file size. 
 ### list_of_events.txt
