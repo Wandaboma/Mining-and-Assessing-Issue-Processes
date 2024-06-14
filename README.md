@@ -1,15 +1,18 @@
-![image](https://github.com/Wandaboma/Mining-and-Assessing-Issue-Processes/assets/42309408/149e7581-4ab1-4c05-9a8c-c9ac1a8d79a8)# Mining-and-Assessing-Issue-Processes
+# Mining-and-Assessing-Issue-Processes
 Mining and Assessing Issue Processes In Open Source Software Repositories with Information Entropy
 
 ## Code
 Source code of the experiment is at code folder
 ### settings.py
-arguments setting file
+Arguments setting file, store universal settings that are used in every file.
 1. **path** : sets where the data, result and graph save to
 2. **repos**: list of repos used for the experiment
 3. **issueTypes**: originally designed for different types of issues, can be omitted this time
+   
 ### repo_selection.py
-select repository with the most stars from database
+First connect to database that stores issue infomation, then select repository with the most number of issues from database.
+
+In the code we output top 40 repos with the most number of issues.
 
 ### raw_data_fetch.py
 fetch original data from database and store the necessary information to local file
