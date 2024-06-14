@@ -37,13 +37,15 @@ Augmented kmeans++ clustering algorithm
 4. choose the optimal K by proposed metrics
 
 ### entropy-resolution.py
-calculate variables for RQ2
+Calculate variables for RQ2, including control variables, independent variables and dependent variables
 
 ### detailed_resolution.py
-calculate variables for RQ3
+calculate variables for RQ3, including control variables, independent variables and dependent variables
 
 ### algorithm_effectiveness.py
-single sided Mann-Whitney U test for RQ1
+Perform single sided Mann-Whitney U test for RQ1, comparing the result of original clustering algorithm and our proposed clustering algorithm.
+
+Use the output from kmeans_clustering.py step 3 as input.
 
 ### analysis_marco.r
 R file to build GLMM models for RQ2
